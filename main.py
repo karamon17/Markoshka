@@ -10,6 +10,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from markoshka.display import (
     ConsoleDisplayDriver,
     DisplayDriver,
+    show_message,
     show_static_message,
 )
 from markoshka.phrases import Category, PHRASE_CATALOGUE
@@ -102,7 +103,7 @@ class ButtonManager:
             self.button.close()
 
 
-UPDATE_PERIOD_SECONDS = 2.0
+UPDATE_PERIOD_SECONDS = 5.0
 
 
 class MarkoshkaApp:
@@ -177,14 +178,14 @@ class MarkoshkaApp:
                 category, phrase = self.sequencer.next_phrase(self.mode)
                 if self.mode != Mode.RANDOM:
                     if category.name != self.last_category_shown:
-                        show_static_message(self.driver, category.name)
+                        show_message(self.driver, category.name)
                         time.sleep(5.0)
                         self.last_category_shown = category.name
                 else:
                     self.last_category_shown = None
 
-                show_static_message(self.driver, phrase)
-                next_tick = now + UPDATE_PERIOD_SECONDS
+                show_message(self.driver, phrase)
+                next_tick = time.monotonic() + UPDATE_PERIOD_SECONDS
 
             time.sleep(0.1)
 

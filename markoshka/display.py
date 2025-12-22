@@ -44,9 +44,24 @@ class ConsoleDisplayDriver(DisplayDriver):
         print(divider)
 
 
-def _flatten_message(message: str) -> str:
-    # Collapse whitespace for scrolling readability.
-    return " ".join(message.split())
+def _wrap_message_lines(message: str) -> List[str]:
+    """Normalize whitespace, honor explicit newlines, wrap without breaking words."""
+
+    lines: List[str] = []
+    for segment in message.split("\n"):
+        normalized = " ".join(segment.split())
+        if not normalized:
+            lines.append("")
+            continue
+        wrapped = wrap(
+            normalized,
+            DISPLAY_WIDTH,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        lines.extend(wrapped)
+
+    return lines or [""]
 
 
 def vertical_scrolling_frames(message: str) -> Iterable[DisplayFrame]:
@@ -56,30 +71,23 @@ def vertical_scrolling_frames(message: str) -> Iterable[DisplayFrame]:
     строк шириной 20 символов так, чтобы они поднимались вверх.
     """
 
-    flat = _flatten_message(message)
-    lines = wrap(flat, DISPLAY_WIDTH)
+    lines = _wrap_message_lines(message)
 
-    # Пустая строка в начале и конце даёт «заезд» и «выезд» текста.
-    padded_lines = [""] + lines + [""]
-    for idx in range(len(padded_lines) - 1):
-        first_line = padded_lines[idx].ljust(DISPLAY_WIDTH)
-        second_line = padded_lines[idx + 1].ljust(DISPLAY_WIDTH)
+    # Показываем сразу первые две строки, затем сдвигаем окно вверх.
+    for idx in range(len(lines) - 1):
+        first_line = lines[idx][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+        second_line = lines[idx + 1][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
         yield DisplayFrame([first_line, second_line])
 
 
 def static_frame(message: str) -> DisplayFrame:
     """Format a short message into two lines without scrolling."""
 
-    if "\n" in message:
-        first_raw, second_raw = message.split("\n", 1)
-        first_line = _flatten_message(first_raw)[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
-        second_line = _flatten_message(second_raw)[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
-    else:
-        text = _flatten_message(message)
-        first_line = text[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
-        second_line = text[DISPLAY_WIDTH : DISPLAY_WIDTH * DISPLAY_HEIGHT].ljust(
-            DISPLAY_WIDTH
-        )
+    lines = _wrap_message_lines(message)
+    first_line = lines[0][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+    second_line = (
+        lines[1][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH) if len(lines) > 1 else " " * DISPLAY_WIDTH
+    )
     return DisplayFrame([first_line, second_line])
 
 
@@ -96,3 +104,13 @@ def show_scrolling_message(
 def show_static_message(driver: DisplayDriver, message: str) -> None:
     frame = static_frame(message)
     driver.write(frame.lines)
+
+
+def show_message(driver: DisplayDriver, message: str, delay: float = 3.0) -> None:
+    """Display a message statically if it fits, otherwise scroll it."""
+
+    lines = _wrap_message_lines(message)
+    if len(lines) <= DISPLAY_HEIGHT:
+        show_static_message(driver, message)
+    else:
+        show_scrolling_message(driver, message, delay=delay)
