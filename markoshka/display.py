@@ -114,3 +114,50 @@ def show_message(driver: DisplayDriver, message: str, delay: float = 3.0) -> Non
         show_static_message(driver, message)
     else:
         show_scrolling_message(driver, message, delay=delay)
+
+
+class PD2800DisplayDriver(DisplayDriver):
+    """HD44780-compatible PD2800 (20x2) via I2C backpack (PCF8574).
+
+    Uses `RPLCD.i2c.CharLCD` under the hood. Adjust `address` if ваш
+    адаптер на 0x3F или другом адресе. Требуется включённый I2C на
+    Raspberry Pi.
+    """
+
+    def __init__(
+        self,
+        address: int = 0x27,
+        port: int = 1,
+        backlight_enabled: bool = True,
+    ) -> None:
+        try:
+            from RPLCD.i2c import CharLCD
+        except ModuleNotFoundError as exc:  # pragma: no cover - hardware dep
+            raise RuntimeError(
+                "RPLCD not installed. Install with `pip install RPLCD` on the Pi."
+            ) from exc
+
+        self.lcd = CharLCD(
+            i2c_expander="PCF8574",
+            address=address,
+            port=port,
+            cols=DISPLAY_WIDTH,
+            rows=DISPLAY_HEIGHT,
+            charmap="A00",
+            auto_linebreaks=False,
+            backlight_enabled=backlight_enabled,
+        )
+        self.clear()
+
+    def clear(self) -> None:
+        self.lcd.clear()
+
+    def write(self, lines: List[str]) -> None:  # pragma: no cover - hardware dep
+        first_line = lines[0][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+        second_line = (
+            lines[1][:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+            if len(lines) > 1
+            else " " * DISPLAY_WIDTH
+        )
+        self.lcd.home()
+        self.lcd.write_string(first_line + "\n" + second_line)

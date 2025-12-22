@@ -18,6 +18,7 @@
 
 ## Запуск
 ```bash
+pip install -r requirements.txt  # на Pi
 python main.py
 ```
 При отсутствии `gpiozero` программа работает в консоли: фразы печатаются в терминал, кнопку имитировать не нужно (режим остаётся «Подряд»).
@@ -45,4 +46,14 @@ sudo systemctl enable --now markoshka.service
 ```
 
 ## Настройка под дисплей
-Класс `ConsoleDisplayDriver` в `markoshka/display.py` — лишь заглушка. Замените его на драйвер конкретного дисплея (например, HD44780) с методом `write(lines: List[str])`, принимающим две строки по 20 символов.
+В проект добавлен драйвер для PD2800 (20x2, I2C-бэкпак PCF8574). При старте пытается использовать его автоматически; если нет библиотеки/шины — падает в консольный режим.
+
+1) Включите I2C на Raspberry Pi: `sudo raspi-config nonint do_i2c 0` (или через меню raspi-config).
+2) Поставьте зависимости на Pi: `sudo apt install -y python3-pip python3-rpi.gpio i2c-tools && pip install RPLCD gpiozero`.
+3) Подключите PD2800 (I2C-модуль):
+   - VCC → 5V, GND → GND
+   - SDA → GPIO2 (SDA1), SCL → GPIO3 (SCL1)
+   - Подсветка: A → 5V (можно через резистор), K → GND
+4) Узнайте адрес адаптера: `sudo i2cdetect -y 1` (обычно 0x27 или 0x3F). Если не 0x27, запустите с `MARKOSHKALCD_ADDR=0x3F python main.py`.
+
+Если хотите явный драйвер в коде, передайте `driver=PD2800DisplayDriver(address=0x27)` в `MarkoshkaApp()`. Console-путь оставлен для отладки без железа.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import random
 import signal
 import time
@@ -10,6 +11,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from markoshka.display import (
     ConsoleDisplayDriver,
     DisplayDriver,
+    PD2800DisplayDriver,
     show_message,
     show_static_message,
 )
@@ -108,7 +110,7 @@ UPDATE_PERIOD_SECONDS = 5.0
 
 class MarkoshkaApp:
     def __init__(self, driver: Optional[DisplayDriver] = None) -> None:
-        self.driver = driver or ConsoleDisplayDriver()
+        self.driver = driver or self._default_driver()
         self.mode = Mode.SEQUENTIAL
         self.sequencer = PhraseSequencer(PHRASE_CATALOGUE)
         self.running = True
@@ -119,6 +121,15 @@ class MarkoshkaApp:
             short_press=self.toggle_mode,
             long_press=self.cycle_category,
         )
+
+    def _default_driver(self) -> DisplayDriver:
+        address_env = os.getenv("MARKOSHKALCD_ADDR")
+        lcd_address = int(address_env, 0) if address_env else 0x27
+        try:
+            return PD2800DisplayDriver(address=lcd_address)
+        except Exception as exc:
+            print(f"PD2800 driver unavailable, falling back to console: {exc}")
+            return ConsoleDisplayDriver()
 
     def toggle_mode(self) -> None:
         next_mode = {
