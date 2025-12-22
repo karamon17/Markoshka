@@ -70,11 +70,16 @@ def vertical_scrolling_frames(message: str) -> Iterable[DisplayFrame]:
 def static_frame(message: str) -> DisplayFrame:
     """Format a short message into two lines without scrolling."""
 
-    text = _flatten_message(message)
-    first_line = text[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
-    second_line = text[DISPLAY_WIDTH : DISPLAY_WIDTH * DISPLAY_HEIGHT].ljust(
-        DISPLAY_WIDTH
-    )
+    if "\n" in message:
+        first_raw, second_raw = message.split("\n", 1)
+        first_line = _flatten_message(first_raw)[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+        second_line = _flatten_message(second_raw)[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+    else:
+        text = _flatten_message(message)
+        first_line = text[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
+        second_line = text[DISPLAY_WIDTH : DISPLAY_WIDTH * DISPLAY_HEIGHT].ljust(
+            DISPLAY_WIDTH
+        )
     return DisplayFrame([first_line, second_line])
 
 

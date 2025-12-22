@@ -10,7 +10,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 from markoshka.display import (
     ConsoleDisplayDriver,
     DisplayDriver,
-    show_scrolling_message,
     show_static_message,
 )
 from markoshka.phrases import Category, PHRASE_CATALOGUE
@@ -103,14 +102,7 @@ class ButtonManager:
             self.button.close()
 
 
-WELCOME_TEXT = (
-    "Марго привет. Я твой новый друг. Меня зовут Маркошка. "
-    "Моя задача тебя поддерживать, вдохновлять и смешить. "
-    "Я разработана твоим тайной Сантой в партнерстве с тайным агентом. "
-    "У меня несколько режимов, менять их можно с помощью кнопки."
-)
-
-UPDATE_PERIOD_SECONDS = 5.0
+UPDATE_PERIOD_SECONDS = 2.0
 
 
 class MarkoshkaApp:
@@ -120,6 +112,7 @@ class MarkoshkaApp:
         self.sequencer = PhraseSequencer(PHRASE_CATALOGUE)
         self.running = True
         self.pending_overlay: Optional[str] = None
+        self.last_category_shown: Optional[str] = None
 
         self.button = ButtonManager(
             short_press=self.toggle_mode,
@@ -151,9 +144,30 @@ class MarkoshkaApp:
             time.sleep(1.5)
             self.pending_overlay = None
 
+    def _simulate_loading(
+        self, duration: float = 5.0, interval: float = 0.7, ready_duration: float = 5.0
+    ) -> None:
+        """Fake loading sequence before the first phrase."""
+
+        start = time.monotonic()
+        frame = 0
+        while True:
+            remaining = duration - (time.monotonic() - start)
+            if remaining <= 0:
+                break
+
+            dots = "." * ((frame % 3) + 1)
+            show_static_message(self.driver, f"Маркошка v1.0\nзагружается{dots}")
+            frame += 1
+            time.sleep(min(interval, max(remaining, 0)))
+
+        show_static_message(self.driver, "Маркошка готова!\nПоехали!")
+        time.sleep(ready_duration)
+
     def run(self) -> None:
-        show_scrolling_message(self.driver, WELCOME_TEXT)
+        self._simulate_loading()
         next_tick = time.monotonic()
+        self.last_category_shown = None
 
         while self.running:
             self._show_overlay()
@@ -161,7 +175,15 @@ class MarkoshkaApp:
             now = time.monotonic()
             if now >= next_tick:
                 category, phrase = self.sequencer.next_phrase(self.mode)
-                show_static_message(self.driver, f"{category.name}: {phrase}")
+                if self.mode != Mode.RANDOM:
+                    if category.name != self.last_category_shown:
+                        show_static_message(self.driver, category.name)
+                        time.sleep(5.0)
+                        self.last_category_shown = category.name
+                else:
+                    self.last_category_shown = None
+
+                show_static_message(self.driver, phrase)
                 next_tick = now + UPDATE_PERIOD_SECONDS
 
             time.sleep(0.1)
