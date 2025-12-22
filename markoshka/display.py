@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from textwrap import wrap
 from time import sleep
 from typing import Iterable, List
 
@@ -48,21 +49,21 @@ def _flatten_message(message: str) -> str:
     return " ".join(message.split())
 
 
-def scrolling_frames(message: str) -> Iterable[DisplayFrame]:
-    """Yield frames that scroll the message to the left over two lines.
+def vertical_scrolling_frames(message: str) -> Iterable[DisplayFrame]:
+    """Yield frames that scroll the message **вверх** построчно.
 
-    The window length equals ``DISPLAY_WIDTH * DISPLAY_HEIGHT`` so the
-    greeting can be longer than two lines while remaining readable.
+    Подход использует обе строки дисплея (20x2), прокручивая набор
+    строк шириной 20 символов так, чтобы они поднимались вверх.
     """
 
     flat = _flatten_message(message)
-    window_size = DISPLAY_WIDTH * DISPLAY_HEIGHT
-    padding = " " * window_size
-    padded = flat + padding
-    for start in range(len(flat) + DISPLAY_WIDTH):
-        window = padded[start : start + window_size]
-        first_line = window[:DISPLAY_WIDTH].ljust(DISPLAY_WIDTH)
-        second_line = window[DISPLAY_WIDTH:window_size].ljust(DISPLAY_WIDTH)
+    lines = wrap(flat, DISPLAY_WIDTH)
+
+    # Пустая строка в начале и конце даёт «заезд» и «выезд» текста.
+    padded_lines = [""] + lines + [""]
+    for idx in range(len(padded_lines) - 1):
+        first_line = padded_lines[idx].ljust(DISPLAY_WIDTH)
+        second_line = padded_lines[idx + 1].ljust(DISPLAY_WIDTH)
         yield DisplayFrame([first_line, second_line])
 
 
@@ -77,10 +78,12 @@ def static_frame(message: str) -> DisplayFrame:
     return DisplayFrame([first_line, second_line])
 
 
-def show_scrolling_message(driver: DisplayDriver, message: str, delay: float = 0.35) -> None:
-    """Animate a scrolling message using the given driver."""
+def show_scrolling_message(
+    driver: DisplayDriver, message: str, delay: float = 0.8
+) -> None:
+    """Animate a **vertical** scrolling message using the given driver."""
 
-    for frame in scrolling_frames(message):
+    for frame in vertical_scrolling_frames(message):
         driver.write(frame.lines)
         sleep(delay)
 
