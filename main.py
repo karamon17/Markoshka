@@ -12,10 +12,12 @@ from markoshka.display import (
     ConsoleDisplayDriver,
     DisplayDriver,
     PD2800DisplayDriver,
+    PD2800SerialDisplayDriver,
     show_message,
     show_static_message,
 )
 from markoshka.phrases import Category, PHRASE_CATALOGUE
+from config import PORT, BAUD
 
 MODE_DISPLAY_NAMES = {
     "sequential": "Режим: подряд",
@@ -123,13 +125,26 @@ class MarkoshkaApp:
         )
 
     def _default_driver(self) -> DisplayDriver:
-        address_env = os.getenv("MARKOSHKALCD_ADDR")
-        lcd_address = int(address_env, 0) if address_env else 0x27
-        try:
-            return PD2800DisplayDriver(address=lcd_address)
-        except Exception as exc:
-            print(f"PD2800 driver unavailable, falling back to console: {exc}")
-            return ConsoleDisplayDriver()
+        transport = os.getenv("MARKOSHKALCD_TRANSPORT", "serial").lower()
+        if transport == "serial":
+            port = os.getenv("MARKOSHKALCD_PORT", PORT)
+            baud_env = os.getenv("MARKOSHKALCD_BAUD")
+            baudrate = int(baud_env) if baud_env else BAUD
+            try:
+                return PD2800SerialDisplayDriver(port=port, baudrate=baudrate)
+            except Exception as exc:
+                print(f"PD2800 serial driver unavailable, trying I2C: {exc}")
+                transport = "i2c"
+
+        if transport == "i2c":
+            address_env = os.getenv("MARKOSHKALCD_ADDR")
+            lcd_address = int(address_env, 0) if address_env else 0x27
+            try:
+                return PD2800DisplayDriver(address=lcd_address)
+            except Exception as exc:
+                print(f"PD2800 I2C driver unavailable, falling back to console: {exc}")
+
+        return ConsoleDisplayDriver()
 
     def toggle_mode(self) -> None:
         next_mode = {

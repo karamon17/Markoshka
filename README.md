@@ -46,14 +46,23 @@ sudo systemctl enable --now markoshka.service
 ```
 
 ## Настройка под дисплей
-В проект добавлен драйвер для PD2800 (20x2, I2C-бэкпак PCF8574). При старте пытается использовать его автоматически; если нет библиотеки/шины — падает в консольный режим.
+В проект добавлены драйверы под PD2800 (20x2):
+- `PD2800SerialDisplayDriver` — VFD через UART (ESC-команды, кодировка CP866), это драйвер по умолчанию.
+- `PD2800DisplayDriver` (I2C, PCF8574) — оставлен для варианта с I2C-платой.
 
-1) Включите I2C на Raspberry Pi: `sudo raspi-config nonint do_i2c 0` (или через меню raspi-config).
-2) Поставьте зависимости на Pi: `sudo apt install -y python3-pip python3-rpi.gpio i2c-tools && pip install RPLCD gpiozero`.
-3) Подключите PD2800 (I2C-модуль):
-   - VCC → 5V, GND → GND
-   - SDA → GPIO2 (SDA1), SCL → GPIO3 (SCL1)
-   - Подсветка: A → 5V (можно через резистор), K → GND
-4) Узнайте адрес адаптера: `sudo i2cdetect -y 1` (обычно 0x27 или 0x3F). Если не 0x27, запустите с `MARKOSHKALCD_ADDR=0x3F python main.py`.
+Зависимости ставятся из `requirements.txt` (есть pyserial, RPLCD, gpiozero).
 
-Если хотите явный драйвер в коде, передайте `driver=PD2800DisplayDriver(address=0x27)` в `MarkoshkaApp()`. Console-путь оставлен для отладки без железа.
+### PD2800 через UART (рекомендовано)
+1) Включите UART на Pi и отключите консоль на /dev/serial0 (raspi-config → Interface Options → Serial).
+2) Подключите дисплей: GND ↔ GND, VCC ↔ 5V, TX дисплея ↔ GPIO15 (RXD), RX дисплея ↔ GPIO14 (TXD). Если у PD2800 уровни RS-232, ставьте преобразователь уровней до 3.3 В.
+3) Запустите: `MARKOSHKALCD_PORT=/dev/serial0 MARKOSHKALCD_BAUD=9600 python main.py` (по умолчанию берутся значения из `config.py`: `/dev/ttyUSB0`, `9600`, но их можно перекрыть переменными окружения).
+
+### PD2800 через I2C (если есть I2C-бэкпак)
+1) Включите I2C: `sudo raspi-config nonint do_i2c 0`.
+2) Зависимости: `sudo apt install -y python3-pip python3-rpi.gpio i2c-tools && pip install -r requirements.txt`.
+3) Подключение: VCC → 5V, GND → GND, SDA → GPIO2 (SDA1), SCL → GPIO3 (SCL1), подсветка A → 5V, K → GND.
+4) Определите адрес: `sudo i2cdetect -y 1` (обычно 0x27/0x3F). При необходимости задайте `MARKOSHKALCD_ADDR=0x3F`.
+
+### Принудительный выбор драйвера
+- UART: `MARKOSHKALCD_TRANSPORT=serial`
+- I2C: `MARKOSHKALCD_TRANSPORT=i2c`

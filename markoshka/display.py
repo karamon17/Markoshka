@@ -1,4 +1,4 @@
-"""Display formatting helpers for 20x2 LCD output."""
+"""Display formatting helpers for 20x2 LCD/VFD output."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def show_message(driver: DisplayDriver, message: str, delay: float = 3.0) -> Non
         show_scrolling_message(driver, message, delay=delay)
 
 
-class PD2800DisplayDriver(DisplayDriver):
+class PD2800I2CDisplayDriver(DisplayDriver):
     """HD44780-compatible PD2800 (20x2) via I2C backpack (PCF8574).
 
     Uses `RPLCD.i2c.CharLCD` under the hood. Adjust `address` if ваш
@@ -161,3 +161,50 @@ class PD2800DisplayDriver(DisplayDriver):
         )
         self.lcd.home()
         self.lcd.write_string(first_line + "\n" + second_line)
+
+
+class PD2800SerialDisplayDriver(DisplayDriver):
+    """PD2800 (20x2) через UART (VFD, ESC-команды, кодировка CP866)."""
+
+    def __init__(
+        self,
+        port: str = "/dev/serial0",
+        baudrate: int = 9600,
+        timeout: float = 1.0,
+        init_delay: float = 0.2,
+    ) -> None:
+        try:
+            import serial  # type: ignore
+        except ModuleNotFoundError as exc:  # pragma: no cover - hardware dep
+            raise RuntimeError("pyserial not installed. Install with `pip install pyserial`.") from exc
+
+        self.serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout)
+        sleep(0.05)
+        self._init_display(init_delay)
+
+    def _init_display(self, init_delay: float) -> None:
+        self.serial.write(b"\x1b@")  # init
+        sleep(init_delay)
+
+    def clear(self) -> None:
+        self.serial.write(b"\x0c")  # clear
+        sleep(0.05)
+
+    def _write_line(self, cmd: bytes, text: str) -> None:
+        payload = (" " + text.ljust(DISPLAY_WIDTH - 1)[: DISPLAY_WIDTH - 1]).encode(
+            "cp866", errors="replace"
+        )
+        self.serial.write(cmd)
+        self.serial.write(payload)
+
+    def write(self, lines: List[str]) -> None:  # pragma: no cover - hardware dep
+        line1 = lines[0] if lines else ""
+        line2 = lines[1] if len(lines) > 1 else ""
+        self.clear()
+        self._write_line(b"\x1bQ", line1)
+        self._write_line(b"\x1bR", line2)
+        self.serial.flush()
+
+
+# Backward compatibility alias
+PD2800DisplayDriver = PD2800I2CDisplayDriver
