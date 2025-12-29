@@ -191,7 +191,8 @@ class PD2800SerialDisplayDriver(DisplayDriver):
         sleep(0.05)
 
     def _write_line(self, cmd: bytes, text: str) -> None:
-        payload = (" " + text.ljust(DISPLAY_WIDTH - 1)[: DISPLAY_WIDTH - 1]).encode(
+        # Send exactly DISPLAY_WIDTH characters per line (pad or truncate).
+        payload = text.ljust(DISPLAY_WIDTH)[: DISPLAY_WIDTH].encode(
             "cp866", errors="replace"
         )
         self.serial.write(cmd)
