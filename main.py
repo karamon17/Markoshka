@@ -124,6 +124,8 @@ class MarkoshkaApp:
         self._prev_mode: Optional[Mode] = None
         # Cache for weather data to avoid repeating API calls more than once per day
         self._weather_cache: Optional[dict] = None
+        # Track last minute shown in weather mode to avoid redrawing within same minute
+        self._last_weather_minute: Optional[int] = None
 
         # Primary button (GPIO17) — existing behavior
         self.mode_button = ButtonManager(
@@ -188,11 +190,15 @@ class MarkoshkaApp:
             self._prev_mode = None
             # show overlay for restored mode
             self.pending_overlay = MODE_DISPLAY_NAMES.get(self.mode.value, "Режим: фразы")
+            # reset minute tracker so next entry will refresh immediately
+            self._last_weather_minute = None
         else:
             # enter weather mode, remember previous
             self._prev_mode = self.mode
             self.mode = Mode.WEATHER
             self.pending_overlay = "Режим: погода"
+            # ensure immediate display on entering mode
+            self._last_weather_minute = None
 
     def fetch_weather(self) -> Optional[dict]:
         """Fetch weather data. Try OpenWeatherMap if API key provided, otherwise Open-Meteo fallback.
@@ -286,10 +292,11 @@ class MarkoshkaApp:
         first_line = f"{time_str} {date_str} {weekday}"
 
         # Second line: temp, humidity, wind (concise)
-        temp = f"{data.get('temp')}°" if data.get("temp") is not None else "?"
-        humidity = f"{data.get('humidity')}%" if data.get("humidity") is not None else "?"
+        temp = f"{data.get('temp')}" if data.get("temp") is not None else "?"
+        humidity = f"{data.get('humidity')}" if data.get("humidity") is not None else "?"
         wind = f"{data.get('wind')}" if data.get("wind") is not None else "?"
-        second_line = f"Темп:{temp} Вл:{humidity} Вет:{wind}м/с"
+        # concise format: "T:XX° H:YY% W:Z.Z" to fit 20 chars
+        second_line = f"T:{temp}° Вл:{humidity}% Вет:{wind}"
 
         # Show statically to avoid vertical scrolling; display driver will
         # truncate/pad lines to DISPLAY_WIDTH.
@@ -332,8 +339,25 @@ class MarkoshkaApp:
             now = time.monotonic()
             if now >= next_tick:
                 if self.mode == Mode.WEATHER:
-                    # show weather summary
-                    self.display_weather()
+                    # Show weather only when minute changes, when first entering,
+                    # or when cached data expired (24h). This prevents constant
+                    # redrawing and eliminates flicker.
+                    now_dt = datetime.now()
+                    curr_minute = now_dt.minute
+                    refresh_needed = False
+                    if self._last_weather_minute is None or curr_minute != self._last_weather_minute:
+                        refresh_needed = True
+                    else:
+                        # check cache expiry
+                        if self._weather_cache:
+                            fetched_at = self._weather_cache.get("fetched_at")
+                            if fetched_at and (time.time() - fetched_at) >= 24 * 3600:
+                                refresh_needed = True
+
+                    if refresh_needed:
+                        self.display_weather()
+                        self._last_weather_minute = curr_minute
+
                     self.last_category_shown = None
                     next_tick = time.monotonic() + UPDATE_PERIOD_SECONDS
                 else:
