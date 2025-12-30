@@ -25,6 +25,7 @@ MODE_DISPLAY_NAMES = {
     "sequential": "Режим: подряд",
     "random": "Режим: рандом",
     "category": "Режим: по разделу",
+    "weather": "Режим: погода",
 }
 
 
@@ -126,6 +127,10 @@ class MarkoshkaApp:
         self._weather_cache: Optional[dict] = None
         # Track last minute shown in weather mode to avoid redrawing within same minute
         self._last_weather_minute: Optional[int] = None
+        # prevent immediate mode-button toggles after switching modes (debounce)
+        self._mode_ignore_until: float = 0.0
+        # When True, ignore mode-button toggles (used while displaying text)
+        self._display_busy: bool = False
 
         # Primary button (GPIO17) — existing behavior
         self.mode_button = ButtonManager(
@@ -164,11 +169,19 @@ class MarkoshkaApp:
         return ConsoleDisplayDriver()
 
     def toggle_mode(self) -> None:
+        # ignore mode toggles if within ignore window (to avoid immediate flip-flop)
+        if time.time() < getattr(self, "_mode_ignore_until", 0):
+            return
+        # also ignore toggles while we're actively writing frames/messages
+        if getattr(self, "_display_busy", False):
+            return
+
         next_mode = {
             Mode.SEQUENTIAL: Mode.RANDOM,
             Mode.RANDOM: Mode.CATEGORY_SEQUENCE,
             Mode.CATEGORY_SEQUENCE: Mode.SEQUENTIAL,
-        }[self.mode]
+            Mode.WEATHER: Mode.SEQUENTIAL,
+        }.get(self.mode, Mode.SEQUENTIAL)
         self.mode = next_mode
         self.pending_overlay = MODE_DISPLAY_NAMES[self.mode.value]
 
@@ -192,6 +205,8 @@ class MarkoshkaApp:
             self.pending_overlay = MODE_DISPLAY_NAMES.get(self.mode.value, "Режим: фразы")
             # reset minute tracker so next entry will refresh immediately
             self._last_weather_minute = None
+            # allow mode button immediately after leaving weather
+            self._mode_ignore_until = time.time() + 0.1
         else:
             # enter weather mode, remember previous
             self._prev_mode = self.mode
@@ -199,6 +214,8 @@ class MarkoshkaApp:
             self.pending_overlay = "Режим: погода"
             # ensure immediate display on entering mode
             self._last_weather_minute = None
+            # ignore mode button briefly to avoid accidental bounce/back-toggle
+            self._mode_ignore_until = time.time() + 1.0
 
     def fetch_weather(self) -> Optional[dict]:
         """Fetch weather data. Try OpenWeatherMap if API key provided, otherwise Open-Meteo fallback.
@@ -304,8 +321,12 @@ class MarkoshkaApp:
 
     def _show_overlay(self) -> None:
         if self.pending_overlay:
-            show_static_message(self.driver, self.pending_overlay)
-            time.sleep(1.5)
+            self._display_busy = True
+            try:
+                show_static_message(self.driver, self.pending_overlay)
+                time.sleep(1.5)
+            finally:
+                self._display_busy = False
             self.pending_overlay = None
 
     def _simulate_loading(
@@ -355,7 +376,12 @@ class MarkoshkaApp:
                                 refresh_needed = True
 
                     if refresh_needed:
-                        self.display_weather()
+                        # mark display busy while rendering weather to avoid button toggles
+                        self._display_busy = True
+                        try:
+                            self.display_weather()
+                        finally:
+                            self._display_busy = False
                         self._last_weather_minute = curr_minute
 
                     self.last_category_shown = None
@@ -364,13 +390,21 @@ class MarkoshkaApp:
                     category, phrase = self.sequencer.next_phrase(self.mode)
                     if self.mode != Mode.RANDOM:
                         if category.name != self.last_category_shown:
-                            show_message(self.driver, category.name)
-                            time.sleep(5.0)
-                            self.last_category_shown = category.name
+                            self._display_busy = True
+                            try:
+                                show_message(self.driver, category.name)
+                                time.sleep(5.0)
+                                self.last_category_shown = category.name
+                            finally:
+                                self._display_busy = False
                     else:
                         self.last_category_shown = None
-
-                    show_message(self.driver, phrase)
+                    # show phrase (wraps/scrolls as necessary) while preventing mode toggles
+                    self._display_busy = True
+                    try:
+                        show_message(self.driver, phrase)
+                    finally:
+                        self._display_busy = False
                     next_tick = time.monotonic() + UPDATE_PERIOD_SECONDS
 
             time.sleep(0.1)
