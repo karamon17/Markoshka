@@ -191,8 +191,10 @@ class PD2800SerialDisplayDriver(DisplayDriver):
         sleep(0.05)
 
     def _write_line(self, cmd: bytes, text: str) -> None:
-        # Send exactly DISPLAY_WIDTH characters per line (pad or truncate).
-        payload = text.ljust(DISPLAY_WIDTH)[: DISPLAY_WIDTH].encode(
+        # Some PD2800 UART firmwares expect an extra leading control/address
+        # byte before printable characters. Prefix a NUL byte and then send
+        # exactly DISPLAY_WIDTH characters (NUL + DISPLAY_WIDTH-1 text).
+        payload = ("\x00" + text.ljust(DISPLAY_WIDTH - 1)[: DISPLAY_WIDTH - 1]).encode(
             "cp866", errors="replace"
         )
         self.serial.write(cmd)
