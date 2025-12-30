@@ -411,7 +411,14 @@ class MarkoshkaApp:
 
     def stop(self) -> None:
         self.running = False
-        self.button.close()
+        # Close any ButtonManager instances if present.
+        for attr in ("mode_button", "weather_button", "button"):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                try:
+                    btn.close()
+                except Exception:
+                    pass
 
 
 def main() -> None:
