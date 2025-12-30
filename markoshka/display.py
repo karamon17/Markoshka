@@ -193,8 +193,9 @@ class PD2800SerialDisplayDriver(DisplayDriver):
     def _write_line(self, cmd: bytes, text: str) -> None:
         # Some PD2800 UART firmwares expect an extra leading control/address
         # byte before printable characters. Prefix a NUL byte and then send
-        # exactly DISPLAY_WIDTH characters (NUL + DISPLAY_WIDTH-1 text).
-        payload = ("\x00" + text.ljust(DISPLAY_WIDTH - 1)[: DISPLAY_WIDTH - 1]).encode(
+        # the full DISPLAY_WIDTH characters so the device doesn't shift one
+        # character between lines.
+        payload = ("\x00" + text.ljust(DISPLAY_WIDTH)[: DISPLAY_WIDTH]).encode(
             "cp866", errors="replace"
         )
         self.serial.write(cmd)
